@@ -1,31 +1,57 @@
-local ICON_TYPE = { "alt_font", "emoji", "html_colors", "nerd_font", "symbols" }
+local ICON_TYPE = { "history", "alt_font", "emoji", "html_colors", "nerd_font", "symbols" }
+local HISTORY_FILE = vim.fn.stdpath("data") .. "/icon-picker-history.txt"
 
 local M = {}
 
+local function get_icons_history()
+	local hist = io.open(HISTORY_FILE, "r")
+	if not hist then
+		return {}
+	end
+
+	local data = {}
+
+	for line in hist:lines() do
+		local columns = vim.split(line, "%s+")
+
+		if #columns > 2 then
+			local key = table.concat(columns, " ", 2)
+			data[key] = {columns[1], columns[2]}
+		end
+	end
+
+	hist:close()
+	return data
+end
+
 local icon_type_data = {
+	['history'] = {
+		icons = get_icons_history(),
+		spaces = 0,
+	},
 	["alt_font"] = {
 		icons = require("icon-picker.icons.alt-fonts"),
-		spaces = 1,
+		spaces = 6,
 	},
 	["emoji"] = {
 		icons = require("icon-picker.icons.emoji-list"),
-		spaces = 1,
+		spaces = 6,
 	},
 	["nerd_font"] = {
 		icons = require("icon-picker.icons.nf-icon-list"),
-		spaces = 2,
+		spaces = 7,
 	},
 	["nerd_font_v3"] = {
 		icons = require("icon-picker.icons.nf-v3-icon-list"),
-		spaces = 2,
+		spaces = 7,
 	},
 	["symbols"] = {
 		icons = require("icon-picker.icons.symbol-list"),
-		spaces = 2,
+		spaces = 7,
 	},
 	["html_colors"] = {
 		icons = require("icon-picker.icons.html-colors"),
-		spaces = 1,
+		spaces = 6,
 	},
 }
 
@@ -69,9 +95,24 @@ local list_types = {
 }
 
 -- vim.ui.select functionality
+local function insert_user_choice_history(choice)
+	local columns = vim.split(choice, "%s+")
+	local key = table.concat(columns, " ", 3)
+	if icon_type_data.history.icons[key] then
+		return
+	end
+
+	icon_type_data.history.icons[key] = {columns[1], columns[2]}
+	local hist = io.open(HISTORY_FILE, "a")
+	if not hist then return end
+	hist:write(choice, "\n")
+	hist:close()
+end
+
 local function insert_user_choice_normal(choice)
 	if choice then
 		local split = vim.split(choice, " ")
+		insert_user_choice_history(choice)
 
 		vim.api.nvim_put({ split[1] }, "", false, true)
 	end
@@ -80,6 +121,7 @@ end
 local function insert_user_choice_insert(choice)
 	if choice then
 		local split = vim.split(choice, " ")
+		insert_user_choice_history(choice)
 
 		local current_line = vim.api.nvim_get_current_line()
 		local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
@@ -97,6 +139,7 @@ end
 local function yank_user_choice_normal(choice)
 	if choice then
 		local split = vim.split(choice, " ")
+		insert_user_choice_history(choice)
 
 		vim.schedule(function()
 			vim.cmd("let @+='" .. split[1] .. "'")
@@ -115,11 +158,39 @@ end
 --- insert a key val pair into a list with an arbitrary amount of spaces
 -- @param  map: hash map of pairs to insert into list
 -- @param  num_spaces: number of spaces to insert between key and val
-local function push_map(map, num_spaces, cur_list)
+local function push_map(type_key, map, num_spaces, cur_list)
+	if type_key == "history" then
+		for key, val in pairs(map) do
+			key = string.format("%-16s", val[2]) .. key
+			val = val[1]
+			table.insert(
+				cur_list,
+				table.concat(
+					{ val, key },
+					string.rep(" ", 8 - vim.fn.strdisplaywidth(val))
+				)
+			)
+		end
+		return cur_list
+	end
+
 	local spaces = string.rep(" ", num_spaces)
+	type_key = string.format("%-16s", type_key)
+	if type_key == "emoji" then
+		for key, val in pairs(map) do
+			table.insert(
+				cur_list,
+				table.concat(
+					{ val, type_key .. key },
+					string.rep(" ", 8 - vim.fn.strdisplaywidth(val))
+				)
+			)
+		end
+		return cur_list
+	end
 
 	for key, val in pairs(map) do
-		table.insert(cur_list, table.concat({ val, key }, spaces))
+		table.insert(cur_list, table.concat({ val, type_key .. key }, spaces))
 	end
 
 	return cur_list
@@ -135,7 +206,7 @@ local function generate_list(keys, desc, callback)
 
 	for _, type_key in ipairs(keys) do
 		cur_tbl = icon_type_data[type_key]
-		item_list = push_map(cur_tbl["icons"], cur_tbl["spaces"], item_list)
+		item_list = push_map(type_key, cur_tbl["icons"], cur_tbl["spaces"], item_list)
 	end
 
 	custom_ui_select(item_list, desc, callback)
@@ -177,7 +248,7 @@ for command, callback in pairs(new_API_table) do
 			end
 
 			-- push icon results into item_list
-			item_list = push_map(cur_tbl["icons"], cur_tbl["spaces"], item_list)
+			item_list = push_map(argument, cur_tbl["icons"], cur_tbl["spaces"], item_list)
 			desc = desc .. " " .. argument
 		end
 
