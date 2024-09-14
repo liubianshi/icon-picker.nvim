@@ -10,6 +10,7 @@ local function get_icons_history()
 	end
 
 	local data = {}
+  local keys = {}
 
 	for line in hist:lines() do
 		local columns = vim.split(line, "%s+")
@@ -17,19 +18,16 @@ local function get_icons_history()
 		if #columns > 2 then
 			local key = table.concat(columns, " ", 2)
 			data[key] = {columns[1], columns[2]}
+      table.insert(keys, 1, key)
 		end
 	end
-
 	hist:close()
-	return data
+  return { icons = data, spaces = 0, sorted_keys = keys}
 end
 
 local icon_type_data = {
-	['history'] = {
-		icons = get_icons_history(),
-		spaces = 0,
-	},
-	["alt_font"] = {
+	['history'] = get_icons_history(),
+  ["alt_font"] = {
 		icons = require("icon-picker.icons.alt-fonts"),
 		spaces = 6,
 	},
@@ -160,7 +158,9 @@ end
 -- @param  num_spaces: number of spaces to insert between key and val
 local function push_map(type_key, map, num_spaces, cur_list)
 	if type_key == "history" then
-		for key, val in pairs(map) do
+    if not icon_type_data.history.sorted_keys then return end
+    for _, key in ipairs(icon_type_data.history.sorted_keys) do
+      local val = map[key]
 			key = string.format("%-16s", val[2]) .. key
 			val = val[1]
 			table.insert(
