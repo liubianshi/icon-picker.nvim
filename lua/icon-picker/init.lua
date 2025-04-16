@@ -206,7 +206,6 @@ end
 M.setup = function(opts)
 	M.history_path = opts.history_path or vim.fn.stdpath("data") .. "/icon-picker-history.txt"
 	M.icon_type_data = generate_icon_type_data()
-	vim.print(vim.inspect(M.icon_type_data.history))
 	generate_api()
 end
 
